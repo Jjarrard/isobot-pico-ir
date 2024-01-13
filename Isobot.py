@@ -1,6 +1,6 @@
-from machine import Pin, PWM, time_pulse_us
-import utime
+from machine import Pin
 import time
+import utime
 
 # Pico MicroPython I-Sobot IR Remote Control by JJarrard.
 
@@ -31,24 +31,6 @@ import time
 # Ngl I have no idea what any of this means and I'm just translating the code.
 # I tried to keep it as verbose as possible as you can see from the comments.
 
-# Constants
-totallength = 22  # number of highs=bits 4 channel +18 command
-channelstart = 0
-commandstart = 4  # bit where command starts
-channellength = 4
-commandlength = 18
-
-
-headerlower = 2300  # lower limit
-headernom = 2550  # nominal
-headerupper = 2800  # upper limit
-zerolower = 300
-zeronom = 380
-zeroupper = 650
-onelower = 800
-onenom = 850  # nominal
-oneupper = 1100
-highnom = 630
 
 # Button codes
 forward = 898819
@@ -194,40 +176,58 @@ randomperformance2 = 629504
 # Got this value from calculating the Arduino prescaler.
 # prescaler = (Pico clock speed / Arduino clock speed) * Arduino prescaler
 # prescaler = (125MHz / 16MHz) * 28 ≈ 218.75
-prescaleValue = 320
+prescaleValue = 219
 
 
 lowFlashes = 0
+
+# Constants
+totallength = 22  # number of highs=bits 4 channel +18 command
+channelstart = 0
+commandstart = 4  # bit where command starts
+channellength = 4
+commandlength = 18
+
+
+headerlower = 2300  # lower limit
+headernom = 2550  # nominal
+headerupper = 2800  # upper limit
+zerolower = 300
+zeronom = 380
+zeroupper = 650
+onelower = 800
+onenom = 850  # nominal
+oneupper = 1100
+highnom = 630
 
 
 class Isobot:
     # initialize an instance of the Isobot class.
     def __init__(self, txpin):
         # Set the TXpin to the specified pin, configured as an output pin
-        self.TXpin = PWM(Pin(txpin))
-        # Set the frequency and duty cycle of the PWM signal
-        self.TXpin.freq(125000000)  # Set the frequency to 125MHz
-        self.TXpin.duty_u16(65535)  # Set the duty cycle to 100%
-
+        self.TXpin = Pin(txpin, Pin.OUT)
+        self.TXpin.value(0)
         # Initialize the bit2 array with 22 zeros
         self.bit2 = [0] * 22
         print("initialised and value of bit2 is: ", self.bit2)
 
     # Generate a square wave signal on the TXpin for a specified amount of time.
-    def oscWrite(self, time):
-        highFlashes = 0
-        # For each cycle in the specified time (divided by 219)...
-        for _ in range(round(time / prescaleValue) - 1):  # ...set the TXpin high...
-            self.TXpin.duty_u16(65535)
-            highFlashes += 1
-            # ...wait for 12 microseconds...
-            utime.sleep_us(12)
-            # ...set the TXpin low...
-            self.TXpin.duty_u16(0)
-            # ...and wait for another 12 microseconds
-            utime.sleep_us(12)
+    def generateSignalWithDuration(self, duration):
+        # Calculate the number of cycles
+        cycles = duration // prescaleValue  # Adjusted prescaler for 125MHz
 
-        print("oscWrite running", highFlashes)
+        # For each cycle...
+        for i in range(cycles):
+            # ...set the TXpin high...
+            self.TXpin.value(1)
+            # ...wait for 13 microseconds...
+            time.sleep_us(13)
+            # ...set the TXpin low...
+            self.TXpin.value(0)
+            # ...and wait for another 13 microseconds
+            time.sleep_us(13)
+
+        # print("generateSignalWithDuration running")
 
     # Calculate 2 to the power of a given number.
     def power2(self, power):
@@ -262,14 +262,14 @@ class Isobot:
     # Send a command to the iSobot robot a specified number of times.
     def send_command_integer(self, integer, numoftimes=1):
         # Convert the integer command to binary and store it in the bit2 array
-        print("integer_to_binary running: ", integer, 22)
+        print("integer_to_binary running: ", integer)
         self.integer_to_binary(integer, 22)
         # print("Binary representation:", self.bit2)
 
         # Repeat the following process numoftimes
         for _ in range(numoftimes):
             # print("Sending header signal")
-            self.oscWrite(headernom)
+            self.generateSignalWithDuration(headernom)
 
             # For each bit in the command...
             for i in range(totallength):
@@ -279,9 +279,8 @@ class Isobot:
                 utime.sleep_us(zeronom if self.bit2[i] == 0 else onenom)
 
                 # print("Sending high signal")
-                self.oscWrite(highnom)
+                self.generateSignalWithDuration(highnom)
 
-            print("Waiting 205ms before repeating")
             utime.sleep_ms(205)
 
     # Convert an integer into a binary representation and store it in the bit2 array.
@@ -299,7 +298,7 @@ class Isobot:
                 # ...otherwise, set the corresponding bit in the bit2 array to 0
                 self.bit2[i] = 0
 
-        print("integer to binary:", self.bit2)
+        # print("integer to binary:", self.bit2)
 
 
 # Assuming Code is a list of commands
