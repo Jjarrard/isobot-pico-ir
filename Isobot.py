@@ -2,20 +2,51 @@ from machine import Pin, time_pulse_us
 import utime
 import time
 
+# Pico MicroPython I-Sobot IR Remote Control by JJarrard.
+
+# Plug IR LED into pin 5 and GND, send commands 0-138 via shell (I used Thonny to test).
+
+# Code analysed and translated/ported from Miles Moody's Isobot Arduino library.
+# Thanks Miles for doing the hard work!
+# Like Miles's library this is code is free and open to the public to do whatever you want with it.
+
+# Thanks to
+# Michal K for some IR explanation https://minkbot.blogspot.com/2009/08/isobot-infrared-remote-protocol-hack.html
+# Takaoka Ishii for the teardown https://robot.watch.impress.co.jp/cda/column/2007/11/08/731.html
+# and this was kinda interesting too https://i-sobothacking.blogspot.com/2007/12/i-sobot-controller-overview-2.html
+
+# If the links are dead, use waybackmachine, I found myself using it for hours trawling old forums.
+
+# Notes from that Miles' library:
+# carrier freq of about 38khz
+# header pulse of 2550 micros high
+# 22 data bits=4 for channel number, 18 for button number
+# highs carry no info and are 550 micros each
+# lows are logic 0 if 550 micros, logic 1 if 1050 micros
+# at end of stream or in between, 205 millis low
+# note: my ir reciever pin goes low when it detects high signal
+#      and stays high when nothing is being recieved
+#      that could cause some confusion
+
+# Ngl I have no idea what any of this means and I'm just translating the code.
+# I tried to keep it as verbose as possible as you can see from the comments.
+
 # Constants
-totallength = 22
+totallength = 22  # number of highs=bits 4 channel +18 command
 channelstart = 0
-commandstart = 4
+commandstart = 4  # bit where command starts
 channellength = 4
 commandlength = 18
-headerlower = 2300
-headernom = 2550
-headerupper = 2800
+
+
+headerlower = 2300  # lower limit
+headernom = 2550  # nominal
+headerupper = 2800  # upper limit
 zerolower = 300
 zeronom = 380
 zeroupper = 650
 onelower = 800
-onenom = 850
+onenom = 850  # nominal
 oneupper = 1100
 highnom = 630
 
@@ -162,27 +193,49 @@ randomperformance2 = 629504
 
 
 class Isobot:
+    # initialize an instance of the Isobot class.
     def __init__(self, txpin, rxpin=None):
+        # Set the TXpin to the specified pin, configured as an output pin
         self.TXpin = Pin(txpin, Pin.OUT)
+
+        # If an RXpin is specified...
         if rxpin is not None:
+            # ...set the RXpin to the specified pin, configured as an input pin
             self.RXpin = Pin(rxpin, Pin.IN)
+
+        # Initialize the bit2 array with 22 zeros
         self.bit2 = [0] * 22
 
+    # Generate a square wave signal on the TXpin for a specified amount of time.
     def oscWrite(self, time):
-        for _ in range(time // 134 - 1):  # prescaler at 134 for 133MHz
+        # For each cycle in the specified time (divided by 219)...
+        # Got this value from calculating the Arduino prescaler.
+        # prescaler = (125MHz / 16MHz) * 28 ≈ 218.75
+        for _ in range(time // 219 - 1):
+            # ...set the TXpin high...
             self.TXpin.value(1)
+            # ...wait for 13 microseconds...
             utime.sleep_us(13)
+            # ...set the TXpin low...
             self.TXpin.value(0)
+            # ...and wait for another 13 microseconds
             utime.sleep_us(13)
 
+    # Calculate 2 to the power of a given number.
     def power2(self, power):
-        return 2**power
+        # Return 2 to the power of the specified number
+        return (
+            2**power
+        )  # The ** operator is used to perform exponentiation in Python.
 
+    # Compute a checksum for a command
     def compute_checksum(self, hdr, cmd1, cmd2, cmd3):
         # first sum up all bytes
         s = hdr + cmd1 + cmd2 + cmd3
+
         # then sum up the result, 3 bits at a time
         s = (s & 7) + ((s >> 3) & 7) + ((s >> 6) & 7)
+
         # return 3 lower bits of the sum
         return s & 7
 
@@ -191,58 +244,116 @@ class Isobot:
         # Combine the header, command bytes, and checksum into a single integer
         return (hdr << 18) | (cmd1 << 12) | (cmd2 << 6) | cmd3 | checksum
 
+    def buttonwrite(self, integer):
+        # Convert the integer to binary and store it in the bit2 array
+        self.integer_to_binary(integer, 22)
+        # Write the header signal
+        self.oscWrite(headernom)
+        # For each bit in the binary representation of the integer...
+        for i in range(totallength):
+            # ...if the bit is 0, wait for the duration of a 'zero' signal...
+            if self.bit2[i] == 0:
+                utime.sleep_us(zeronom)
+            # ...otherwise, wait for the duration of a 'one' signal
+            else:
+                utime.sleep_us(onenom)
+            # Write a 'high' signal
+            self.oscWrite(highnom)
+        # Wait for 205 milliseconds
+        utime.sleep_ms(205)
+
+    # Send a command to the iSobot robot a specified number of times.
     def buttonwrite(self, integer, numoftimes=1):
-        self.ItoB(integer, 22)
+        # Convert the integer command to binary and store it in the bit2 array
+        self.integer_to_binary(integer, 22)
+
+        # Repeat the following process numoftimes
         for _ in range(numoftimes):
+            # Send the header signal
             self.oscWrite(headernom)
+
+            # For each bit in the command...
             for i in range(totallength):
+                # ...if the bit is 0, wait for a short time, otherwise wait for a longer time
                 utime.sleep_us(zeronom if self.bit2[i] == 0 else onenom)
+
+                # Send a high signal
                 self.oscWrite(highnom)
+
+            # Wait for a short time before repeating the process
             utime.sleep_ms(205)
 
-    def ItoB(self, integer, length):
+    # Convert an integer into a binary representation and store it in the bit2 array.
+    def integer_to_binary(self, integer, length):
+        # For each bit in the binary representation...
         for i in range(length):
+            # ...if the integer divided by 2 to the power of (length - 1 - i) is 1...
             if integer // self.power2(length - 1 - i) == 1:
+                # ...subtract that power of 2 from the integer...
                 integer -= self.power2(length - 1 - i)
+
+                # ...and set the corresponding bit in the bit2 array to 1
                 self.bit2[i] = 1
             else:
+                # ...otherwise, set the corresponding bit in the bit2 array to 0
                 self.bit2[i] = 0
 
-    def BtoI(self, start, numofbits, bit):
+    def binary_to_integer(self, start, numofbits, bit):
+        # Initialize the integer to 0
         integer = 0
+        # Set i to the start index
         i = start
+        # Initialize a counter n to 0
         n = 0
+        # While n is less than the number of bits...
         while n < numofbits:
+            # ...add to the integer the value of the current bit times 2 to the power of (numofbits - n - 1)
             integer += bit[i] * self.power2((numofbits - n - 1))
+            # Increment the index and the counter
             i += 1
             n += 1
+        # Return the resulting integer
         return integer
 
     def receivecode(self):
+        # Initialize an array of bits and an array of pulse lengths, both of size totallength
         bit = [0] * totallength
         plen = [0] * totallength
-        i = 0
+
+        # Wait until the RX pin is low
         while self.RXpin.value() == 1:
             pass
+
+        # Measure the length of each pulse and store it in the plen array
         for i in range(totallength):
             plen[i] = time_pulse_us(self.RXpin, 1)
+
+        # Determine the value of each bit based on the length of the corresponding pulse
         for i in range(totallength):
             if zerolower < plen[i] < zeroupper:
                 bit[i] = 0
             elif onelower < plen[i] < oneupper:
                 bit[i] = 1
+
+        # The first bit is the channel
         channel = bit[0]
+
+        # Reset the plen array
         for i in range(totallength):
             plen[i] = 0
-        time.sleep(1)
-        return self.BtoI(channelstart, totallength, bit)
 
-    def compute_checksum(hdr, cmd1, cmd2, cmd3):
-        # first sum up all bytes
+        # Wait for 1 second
+        time.sleep(1)
+
+        # Convert the binary representation in the bit array to an integer and return it
+        return self.binary_to_integer(channelstart, totallength, bit)
+
+    def compute_checksum(self, hdr, cmd1, cmd2, cmd3):
+        # Sum up all the command bytes
         s = hdr + cmd1 + cmd2 + cmd3
-        # then sum up the result, 3 bits at a time
+        # Then sum up the result, 3 bits at a time
         s = (s & 7) + ((s >> 3) & 7) + ((s >> 6) & 7)
-        # return 3 lower bits of the sum
+        # Return the 3 lower bits of the sum
         return s & 7
 
 
@@ -386,36 +497,47 @@ Code = [
     mystery1,  # 135
     pose3,  # 136
     pose2,  # 137
-    pose1,
-]  # 138
+    pose1,  # 138
+]
 
 isobot = Isobot(5, 0)  # tx is IR OUT pin
 
 
 def serial_command():
+    # Request a command number from the user
     data1 = input("Please enter the command number")
+    # Convert the input to an integer
     i = int(data1)
 
+    # If the command number is less than or equal to 11...
     if i <= 11:
-        for k in range(1):
+        # ...print the corresponding command and send it to the iSobot robot 3 times
+        for k in range(5):
             print(Code[i])
             isobot.buttonwrite(Code[i], 3)
     else:
+        # ...otherwise, print the command and send it to the robot 3 times
         print(Code[i])
         isobot.buttonwrite(Code[i], 3)
 
+    # Request another command number from the user
     data0 = input("Please enter the command number")
+    # Convert the input to an integer
     ir = int(data0)
 
+    # If the command number is less than or equal to 11...
     if ir <= 11:
-        for k in range(1):
+        # ...print the corresponding command and send it to the iSobot robot 3 times
+        for k in range(5):
             print(Code[ir])
             isobot.buttonwrite(Code[ir], 3)
     else:
+        # ...otherwise, print the command and send it to the robot 3 times
         print(Code[ir])
         isobot.buttonwrite(Code[ir], 3)
 
 
+# Continuously call the serial_command function with a 10 millisecond delay between each call
 while True:
     serial_command()
-    time.sleep_ms(10)
+    time.sleep_ms(100)
