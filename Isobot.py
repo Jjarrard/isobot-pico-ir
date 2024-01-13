@@ -176,10 +176,6 @@ randomperformance2 = 629504
 # Got this value from calculating the Arduino prescaler.
 # prescaler = (Pico clock speed / Arduino clock speed) * Arduino prescaler
 # prescaler = (125MHz / 16MHz) * 28 ≈ 218.75
-prescaleValue = 219
-
-
-lowFlashes = 0
 
 # Constants
 totallength = 22  # number of highs=bits 4 channel +18 command
@@ -200,85 +196,49 @@ onenom = 850  # nominal
 oneupper = 1100
 highnom = 630
 
+TXpin = 6  # pin 6 is test LED pin / 5 is IR LED pin
+bit2 = [0] * 22
+
 
 class Isobot:
     # initialize an instance of the Isobot class.
-    def __init__(self, txpin):
-        # Set the TXpin to the specified pin, configured as an output pin
-        self.TXpin = Pin(txpin, Pin.OUT)
+    def __init__(self):
+        global TXpin
+        self.TXpin = Pin(TXpin, Pin.OUT)
+
         self.TXpin.value(0)
         # Initialize the bit2 array with 22 zeros
         self.bit2 = [0] * 22
-        print("initialised and value of bit2 is: ", self.bit2)
 
     # Generate a square wave signal on the TXpin for a specified amount of time.
     def generateSignalWithDuration(self, duration):
+        global TXpin
         # Calculate the number of cycles
-        cycles = duration // prescaleValue  # Adjusted prescaler for 125MHz
+        cycles = duration // 219  # Adjusted prescaler for 125MHz
 
-        # For each cycle...
-        for i in range(cycles):
-            # ...set the TXpin high...
+        for _ in range(cycles):
             self.TXpin.value(1)
-            # ...wait for 13 microseconds...
             time.sleep_us(13)
-            # ...set the TXpin low...
             self.TXpin.value(0)
-            # ...and wait for another 13 microseconds
             time.sleep_us(13)
-
-        # print("generateSignalWithDuration running")
-
-    # Calculate 2 to the power of a given number.
-    def power2(self, power):
-        # Return 2 to the power of the specified number
-        # print("power2 running: " + str(power) + " " + str(2**power))
-        return (
-            2**power
-        )  # The ** operator is used to perform exponentiation in Python.
-
-    # Compute a checksum for a command
-    def compute_checksum(self, hdr, cmd1, cmd2, cmd3):
-        print("Computing checksum: ", self, hdr, cmd1, cmd2, cmd3)
-        # first sum up all bytes
-        s = hdr + cmd1 + cmd2 + cmd3
-        # print("sum of bytes", s)
-        # then sum up the result, 3 bits at a time
-        s = (s & 7) + ((s >> 3) & 7) + ((s >> 6) & 7)
-        # print("sum of result 3 bits at time?", s)
-        # return 3 lower bits of the sum
-        print("return 3 lower bits of the sum: ", s & 7)
-        return s & 7
-
-    def compute_checksum_and_combine(self, hdr, cmd1, cmd2, cmd3):
-        checksum = self.compute_checksum(hdr, cmd1, cmd2, cmd3)
-        # Combine the header, command bytes, and checksum into a single integer
-        print(
-            "combine the header, command bytes, and checksum into a single integer: ",
-            (hdr << 18) | (cmd1 << 12) | (cmd2 << 6) | cmd3 | checksum,
-        )
-        return (hdr << 18) | (cmd1 << 12) | (cmd2 << 6) | cmd3 | checksum
 
     # Send a command to the iSobot robot a specified number of times.
     def send_command_integer(self, integer, numoftimes=1):
+        global bit2
         # Convert the integer command to binary and store it in the bit2 array
-        print("integer_to_binary running: ", integer)
         self.integer_to_binary(integer, 22)
-        # print("Binary representation:", self.bit2)
 
-        # Repeat the following process numoftimes
+        # foreach numoftimes
         for _ in range(numoftimes):
-            # print("Sending header signal")
+            # sends header
             self.generateSignalWithDuration(headernom)
 
-            # For each bit in the command...
+            # then for each bit in the command...
             for i in range(totallength):
-                delay = zeronom if self.bit2[i] == 0 else onenom
-                # print(f"Bit {i}: {self.bit2[i]}, delay: {delay}us")
-
+                # bit is 0 then wait zeronom microseconds bit = 1 then wait onenominal microseconds
                 utime.sleep_us(zeronom if self.bit2[i] == 0 else onenom)
 
-                # print("Sending high signal")
+                # Send highnom microseconds of high signal
                 self.generateSignalWithDuration(highnom)
 
             utime.sleep_ms(205)
@@ -287,18 +247,18 @@ class Isobot:
     def integer_to_binary(self, integer, length):
         # For each bit in the binary representation...
         for i in range(length):
-            # ...if the integer divided by 2 to the power of (length - 1 - i) is 1...
-            if integer // self.power2(length - 1 - i) == 1:
-                # ...subtract that power of 2 from the integer...
-                integer -= self.power2(length - 1 - i)
+            # if the integer divided by 2 to the power of (length - 1 - i) is 1
+            if integer // (2 ** (length - 1 - i)) == 1:
+                # subtract that power of 2 from the integer
+                integer -= 2 ** (length - 1 - i)
 
-                # ...and set the corresponding bit in the bit2 array to 1
+                # and set the corresponding bit in the bit2 array to 1
                 self.bit2[i] = 1
             else:
-                # ...otherwise, set the corresponding bit in the bit2 array to 0
+                # otherwise, set the corresponding bit in the bit2 array to 0
                 self.bit2[i] = 0
 
-        # print("integer to binary:", self.bit2)
+        print(self.bit2)
 
 
 # Assuming Code is a list of commands
@@ -444,8 +404,8 @@ Code = [
     pose1,  # 138
 ]
 
-# isobot = Isobot(5)  # 5 is IR pin
-isobot = Isobot(5)  # 6 is test LED pin
+
+isobot = Isobot()  # 5 IR LED / 6 is test LED pin
 
 
 def serial_command():
@@ -455,17 +415,15 @@ def serial_command():
     i = int(inputCommand)
 
     # If the command number is less than or equal to 11... I don't understand this
+    # probably because they're joystick commands and not poses etc
     if i <= 11:
         # send command to the iSobot robot 3 times
         for k in range(5):
-            # print(Code[i])
             isobot.send_command_integer(Code[i], 3)
     else:
-        # ...otherwise, #print the command and send it to the robot 3 times
-        # print(Code[i])
-        isobot.send_command_integer(Code[i], 3)
+        # otherwise, send it to the robot once
+        isobot.send_command_integer(Code[i], 1)
 
     serial_command()  # Listen for next command
 
-
-serial_command()  # run on start
+serial_command()
