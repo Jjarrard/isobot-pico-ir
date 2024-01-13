@@ -177,6 +177,10 @@ randomperformance2 = 629504
 # prescaler = (Pico clock speed / Arduino clock speed) * Arduino prescaler
 # prescaler = (125MHz / 16MHz) * 28 ≈ 218.75
 
+# The prescaler is used to divide the clock frequency to get the desired frequency.
+# In this case, the prescaler value is 28 and the clock frequency is 16 MHz.
+# So, the desired frequency would be 16 MHz / 28, which is approximately 571.43 kHz?? Surely this is wrong
+
 # Constants
 totallength = 22  # number of highs=bits 4 channel +18 command
 channelstart = 0
@@ -196,15 +200,14 @@ onenom = 850  # nominal
 oneupper = 1100
 highnom = 630
 
-TXpin = 6  # pin 6 is test LED pin / 5 is IR LED pin
+pinNum = 6  # pin 6 is test LED pin / 5 is IR LED pin
 bit2 = [0] * 22
 
 
 class Isobot:
     # initialize an instance of the Isobot class.
     def __init__(self):
-        global TXpin
-        self.TXpin = Pin(TXpin, Pin.OUT)
+        self.TXpin = Pin(pinNum, Pin.OUT)
 
         self.TXpin.value(0)
         # Initialize the bit2 array with 22 zeros
@@ -212,15 +215,23 @@ class Isobot:
 
     # Generate a square wave signal on the TXpin for a specified amount of time.
     def generateSignalWithDuration(self, duration):
-        global TXpin
         # Calculate the number of cycles
-        cycles = duration // 219  # Adjusted prescaler for 125MHz
+        cycles = int(duration // 26.32)  # Adjusted for 38 kHz signal
 
         for _ in range(cycles):
             self.TXpin.value(1)
             time.sleep_us(13)
             self.TXpin.value(0)
             time.sleep_us(13)
+
+        # Calculate the expected frequency
+        cycle_time_us = 26  # Total delay time for one cycle in microseconds
+        frequency_khz = 1 / (
+            cycle_time_us * 1e-3
+        )  # Convert cycle time to milliseconds and calculate frequency
+
+        print(f"Expected cycle time: {cycle_time_us} microseconds")
+        print(f"Expected frequency: {frequency_khz} kHz")
 
     # Send a command to the iSobot robot a specified number of times.
     def send_command_integer(self, integer, numoftimes=1):
@@ -258,7 +269,7 @@ class Isobot:
                 # otherwise, set the corresponding bit in the bit2 array to 0
                 self.bit2[i] = 0
 
-        print(self.bit2)
+        # print(self.bit2)
 
 
 # Assuming Code is a list of commands
@@ -405,7 +416,7 @@ Code = [
 ]
 
 
-isobot = Isobot()  # 5 IR LED / 6 is test LED pin
+isobot = Isobot()
 
 
 def serial_command():
@@ -414,10 +425,8 @@ def serial_command():
     # Convert the input to an integer
     i = int(inputCommand)
 
-    # If the command number is less than or equal to 11... I don't understand this
-    # probably because they're joystick commands and not poses etc
     if i <= 11:
-        # send command to the iSobot robot 3 times
+        # send command to the iSobot robot 5 times
         for k in range(5):
             isobot.send_command_integer(Code[i], 3)
     else:
@@ -425,5 +434,6 @@ def serial_command():
         isobot.send_command_integer(Code[i], 1)
 
     serial_command()  # Listen for next command
+
 
 serial_command()
