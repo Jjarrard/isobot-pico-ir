@@ -1,5 +1,5 @@
 # isobot-pico-ir
-Ported from Arduino.. 
+Translated from Arduino.
 
 **This code does not work**, but if you want to try get it working on a pico and merge the fix, be my guest. I've wasted 4 days straight on it.
 
