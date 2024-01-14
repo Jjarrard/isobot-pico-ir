@@ -173,14 +173,6 @@ giantrobot = 956416
 western = 1022208
 randomperformance2 = 629504
 
-# Got this value from calculating the Arduino prescaler.
-# prescaler = (Pico clock speed / Arduino clock speed) * Arduino prescaler
-# prescaler = (125MHz / 16MHz) * 28 ≈ 218.75
-
-# The prescaler is used to divide the clock frequency to get the desired frequency.
-# In this case, the prescaler value is 28 and the clock frequency is 16 MHz.
-# So, the desired frequency would be 16 MHz / 28, which is approximately 571.43 kHz?? Surely this is wrong
-
 # Constants
 totallength = 22  # number of highs=bits 4 channel +18 command
 channelstart = 0
@@ -211,8 +203,7 @@ class Isobot:
         self.bit2 = [0] * 22  # Initialize bit2 as a list of 22 zeros
 
     def oscWrite(self, time_value):
-        # Calculate the number of cycles
-        cycles = int(time_value / 26.32)  # number of cycles for 38kHz
+        cycles = int(time_value / 26.32)  # number of cycles for 38kHz? I think, Arduino 16MHz library said //prescaler at 28 for 16mhz, 52 at 8mhz, ? for 20mhz
         half_cycle_time = 13  # Half cycle delay for 38kHz
         for _ in range(cycles):
             self.TXpin.value(1)
