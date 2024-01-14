@@ -205,71 +205,43 @@ bit2 = [0] * 22
 
 
 class Isobot:
-    # initialize an instance of the Isobot class.
-    def __init__(self):
-        self.TXpin = Pin(pinNum, Pin.OUT)
+    def __init__(self, txpin):
+        self.TXpin = Pin(txpin, Pin.OUT)
 
-        self.TXpin.value(0)
-        # Initialize the bit2 array with 22 zeros
-        self.bit2 = [0] * 22
+        self.bit2 = [0] * 22  # Initialize bit2 as a list of 22 zeros
 
-    # Generate a square wave signal on the TXpin for a specified amount of time.
-    def generateSignalWithDuration(self, duration):
+    def oscWrite(self, time_value):
         # Calculate the number of cycles
-        cycles = int(duration // 26.32)  # Adjusted for 38 kHz signal
-
+        cycles = int(time_value / 26.32)  # number of cycles for 38kHz
+        half_cycle_time = 13  # Half cycle delay for 38kHz
         for _ in range(cycles):
             self.TXpin.value(1)
-            time.sleep_us(13)
+            time.sleep_us(half_cycle_time)
             self.TXpin.value(0)
-            time.sleep_us(13)
+            time.sleep_us(half_cycle_time)
 
-        # Calculate the expected frequency
-        cycle_time_us = 26  # Total delay time for one cycle in microseconds
-        frequency_khz = 1 / (
-            cycle_time_us * 1e-3
-        )  # Convert cycle time to milliseconds and calculate frequency
+    def power2(self, power):
+        return 2**power
 
-        print(f"Expected cycle time: {cycle_time_us} microseconds")
-        print(f"Expected frequency: {frequency_khz} kHz")
-
-    # Send a command to the iSobot robot a specified number of times.
-    def send_command_integer(self, integer, numoftimes=1):
-        global bit2
-        # Convert the integer command to binary and store it in the bit2 array
-        self.integer_to_binary(integer, 22)
-
-        # foreach numoftimes
-        for _ in range(numoftimes):
-            # sends header
-            self.generateSignalWithDuration(headernom)
-
-            # then for each bit in the command...
-            for i in range(totallength):
-                # bit is 0 then wait zeronom microseconds bit = 1 then wait onenominal microseconds
-                utime.sleep_us(zeronom if self.bit2[i] == 0 else onenom)
-
-                # Send highnom microseconds of high signal
-                self.generateSignalWithDuration(highnom)
-
-            utime.sleep_ms(205)
-
-    # Convert an integer into a binary representation and store it in the bit2 array.
-    def integer_to_binary(self, integer, length):
-        # For each bit in the binary representation...
+    def ItoB(self, integer, length):
         for i in range(length):
-            # if the integer divided by 2 to the power of (length - 1 - i) is 1
-            if integer // (2 ** (length - 1 - i)) == 1:
-                # subtract that power of 2 from the integer
-                integer -= 2 ** (length - 1 - i)
-
-                # and set the corresponding bit in the bit2 array to 1
+            if (integer // self.power2(length - 1 - i)) == 1:
+                integer -= self.power2(length - 1 - i)
                 self.bit2[i] = 1
             else:
-                # otherwise, set the corresponding bit in the bit2 array to 0
                 self.bit2[i] = 0
 
-        # print(self.bit2)
+    def buttonwrite(self, integer, numoftimes=1):
+        self.ItoB(integer, 22)
+        for _ in range(numoftimes):
+            self.oscWrite(2550)
+            for i in range(22):
+                if self.bit2[i] == 0:
+                    time.sleep_us(380)
+                else:
+                    time.sleep_us(850)
+                self.oscWrite(630)
+            time.sleep_ms(205)
 
 
 # Assuming Code is a list of commands
@@ -416,7 +388,7 @@ Code = [
 ]
 
 
-isobot = Isobot()
+isobot = Isobot(6)
 
 
 def serial_command():
@@ -428,10 +400,10 @@ def serial_command():
     if i <= 11:
         # send command to the iSobot robot 5 times
         for k in range(5):
-            isobot.send_command_integer(Code[i], 3)
+            isobot.buttonwrite(Code[i], 3)
     else:
         # otherwise, send it to the robot once
-        isobot.send_command_integer(Code[i], 1)
+        isobot.buttonwrite(Code[i], 3)
 
     serial_command()  # Listen for next command
 
