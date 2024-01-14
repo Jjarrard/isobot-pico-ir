@@ -5,5 +5,5 @@ Ported from Arduino..
 
 My only observation is that the overheads of MicroPython is slowing the IR cycles too much, and I've no idea how to fix it.
 
-The supposedly runs at 125MHz, but in testing it's been much much slower, to the tune of roughly 205588.8 Hz unless my testing was performed incorrectly (which is a high probability).
+The Pico supposedly runs at 125MHz, but in testing it's been much much slower, to the tune of roughly 205588.8 Hz unless my testing was performed incorrectly (which is a high probability).
 
