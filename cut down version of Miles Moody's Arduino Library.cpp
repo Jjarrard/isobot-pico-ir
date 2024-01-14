@@ -1,6 +1,6 @@
 
 //NOTE THIS ISN'T THE ENTIRE FILE, ALSO MISSING H FILE AND INO CALLING BUTTONWRITE WITH A COMMAND INDEX
-//I've used this short version of the library and it still works perfectly, I just removed unused IR recieving code.
+//I've used this short version of the library and it still works perfectly on a 16MHz Arduino Mini/Nano, I just removed unused IR recieving code.
 
 
 #include "Arduino.h"
